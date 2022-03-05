@@ -1,0 +1,12 @@
+# We do not want to do a port scan, only get the list of hosts dynamically
+---
+plugin: nmap
+address: 192.168.1.0/24
+strict: False
+ipv4: yes
+ports: no
+# cache: yes
+# cache_plugin: ansible.builtin.jsonfile
+# cache_timeout: 7200
+# cache_connection: /home/josevnz/nmap_inventory
+# cache_prefix: nmap_home
