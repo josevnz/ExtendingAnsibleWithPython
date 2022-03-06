@@ -132,9 +132,9 @@ Let's try it with the ping module, and the remote user 'josevnz':
 }
 ```
 
-No surprises here. But as you can see, this is not very convenient as we had to do a little but of Bash scripting to generate the hostlist; also the inventory is hardcoded.
+No surprises here. But as you can see, this is not very convenient as we had to do a little but of Bash scripting to generate the hostlist; also the inventory is _static_.
 
-Let's move on to a more interesting plug-ing, using nmap
+Let's move on to a more interesting plug-ing, using [Nmap](https://nmap.org/)
 
 ### Nmap plugin
 
@@ -167,7 +167,7 @@ Discovered open port 35387/tcp on 192.168.1.4
 
 Keep in mind than the scan above is a time-consuming operation; You are checking every port and every possible host on your network, so this may take minutes _or even hours if you don't tune up your query_.
 
-With that in mind, let's keep this useful links around:
+With that in mind, let's keep this useful links around, will use then to tune our arguments for Nmap:
 
 * [NMAP Port Scanning Techniques](https://nmap.org/book/man-port-scanning-techniques.html)
 * [NMAP Timing and Performance](https://nmap.org/book/man-performance.html).
@@ -230,7 +230,10 @@ Nmap done: 256 IP addresses (8 hosts up) scanned in 2.52 seconds
 
 This small difference may be a factor for bigger networks, so for now will keep the port scanning on 22.
 
-There are [many ways to extend Nmap](https://github.com/josevnz/home_nmap/blob/main/tutorial/README.md) to give you the data that you want; We will use '[nmap_scan_rpt.py](https://github.com/josevnz/home_nmap/blob/main/scripts/nmap_scan_rpt.py)' to show the results of the scan in a nice table, with links to NIST advisories if versions of your services are vulnerable:
+Finally, going forward I will not use the '-n' switch. If passed, the DNS resolution will be disabled, and we will never know the names of the machines we just scanned.
+
+By now you are probably wondering, how you can extend Nmap? there are [many ways](https://github.com/josevnz/home_nmap/blob/main/tutorial/README.md), 
+let me show you '[nmap_scan_rpt.py](https://github.com/josevnz/home_nmap/blob/main/scripts/nmap_scan_rpt.py)' script that can correlate your services with security advisories.
 
 ```shell
 git clone git@github.com:josevnz/home_nmap.git $HOME/home_nmap.git
@@ -242,15 +245,13 @@ nmap_scan_rpt.py $HOME/home_scan.xml
 
 ![](nmap_scan_rpt.py.png)
 
-Feel free to play with the code, you can also run Nmap as a web service, but for now let's move into Ansible with Nmap
+Feel free to play with the code, you can also run Nmap as a web service, but now let's move back to Ansible with Nmap
 
 ### The Ansible nmap plugin
 
 Now we are ready to explore the [Ansible Nmap plugin](https://docs.ansible.com/ansible/latest/collections/community/general/nmap_inventory.html);
 
 ```yaml
-# We do not want to do a port scan, only get the list of hosts dynamically
----
 # We do not want to do a port scan, only get the list of hosts dynamically
 ---
 plugin: nmap
@@ -263,10 +264,13 @@ groups:
   regular: "'host' in hostname"
 ```
 
+Then let test it:
 
 ```shell
 [josevnz@dmaf5 EnableSysadmin]$ ansible-inventory -i ExtendingAnsibleWithPython/Inventories/home_nmap_inventory.yaml --lis
 ```
+
+That produces a nice JSON that will be consumed by Ansible:
 
 ```json
 {
@@ -300,9 +304,9 @@ groups:
 }
 ```
 
-I [could not get to work the jinja2 'groups' feature](https://stackoverflow.com/questions/61826110/dynamic-inventory-groups-from-ansible-plugin-nmap), to put hosts into dynamic groups based on their hostname.
+*NOTE*: I [could not get to work the jinja2 'groups' feature](https://stackoverflow.com/questions/61826110/dynamic-inventory-groups-from-ansible-plugin-nmap), to put hosts into dynamic groups based on their hostname.
 
-There is another way to create an inventory using Nmap with Ansible? Let's find out.
+That made think if there is another way to create an inventory using Nmap with Ansible. Time to write a wrapper script.
 
 ## Enter the world of dynamic inventory
 
@@ -446,11 +450,42 @@ Ansible documentation [is very clear](https://docs.ansible.com/ansible/latest/de
 
 Wait a second. There is nothing in there that says than Ansible will provide the network to scan for hosts, how do we inject that?
 
-To keep things simple, our script will be able to read a configuration file on "~/config/nmap_inventory.ini" with the following:
+To keep things simple, our script will be able to read a YAML configuration file on "/home/josevnz/.ansible/plugins/cliconf/nmap_plugin.yaml" with the following:
 
-```ini
-[DEFAULT]
-Addresses = 192.168.1.0/24
+```yaml
+# Sample configuration file
+---
+plugin: nmap_plugin
+address: 192.168.1.0/24
+```
+
+The class that reads the code is quite simple:
+```python
+"""
+Using a configuration file in YAML format, so it can be reused by the plugin.
+Init file with ConfigParser is more convenient, trying to keep Ansible happy :wink:
+"""
+import os
+from yaml import safe_load
+
+try:
+    from yaml import CLoader as Loader, CDumper as Dumper
+except ImportError:
+    from yaml import Loader, Dumper
+
+def load_config(config_file: str = os.path.expanduser("~/.ansible/plugins/cliconf/nmap_inventory.cfg")):
+    """
+    Where to copy the configuration file:
+    ```shell
+    [josevnz@dmaf5 EnableSysadmin]$ ansible-config dump |grep DEFAULT_CLICONF_PLUGIN_PATH
+    DEFAULT_CLICONF_PLUGIN_PATH(default) = ['/home/josevnz/.ansible/plugins/cliconf', '/usr/share/ansible/plugins/cliconf']
+    ```
+    :param config_file:
+    :return:
+    """
+    with open(config_file, 'r') as stream:
+        data = safe_load(stream)
+        return data
 ```
 
 Very good, let's see some code now:
@@ -468,7 +503,6 @@ import argparse
 from configparser import ConfigParser, MissingSectionHeaderError
 
 from inventories.nmap import NmapRunner
-
 
 def load_config() -> ConfigParser:
     cp = ConfigParser()
@@ -521,7 +555,6 @@ def get_list(search_address: str, pretty=False) -> str:
     }
     return json.dumps(data, indent=pretty)
 
-
 if __name__ == '__main__':
 
     arg_parser = argparse.ArgumentParser(
@@ -568,9 +601,7 @@ You probably noticed a few things:
 1. Most of the code on this script is dedicated to handling arguments and loading configuration, besides presenting the JSON
 2. You could add grouping logic into get_list. For now, I'm populating the 2 default groups.
 
-
-
-Time to kick the tires now. Install the code first:
+It is time to kick the tires now. Install the code first:
 
 ```shell
 git clone git@github.com:josevnz/ExtendingAnsibleWithPython.git
@@ -591,7 +622,7 @@ The virtual environment should be active now, let's see if we get an empty host 
 {}
 ```
 
-Good, expected as we did not implement the ```--host $HOSTNAME method```. What about ```--list```?:
+Good, empty JSON expected as we did not implement the ```--host $HOSTNAME method```. What about ```--list```?:
 
 ```shell
 (ExtendingAnsibleWithPythonInventory) [josevnz@dmaf5 Inventories]$ ansible-inventory --inventory scripts/nmap_inventory.py --list
@@ -629,6 +660,50 @@ Good, expected as we did not implement the ```--host $HOSTNAME method```. What a
         ]
     }
 }
+```
+
+Finally, let's try our new inventory with the ping module:
+
+```shell
+(ExtendingAnsibleWithPythonInventory) [josevnz@dmaf5 Inventories]$ ansible --inventory scripts/nmap_inventory.py --user josevnz -m ping all
+dmaf5.home | SUCCESS => {
+    "changed": false,
+    "ping": "pong"
+}
+raspberrypi | SUCCESS => {
+    "changed": false,
+    "ping": "pong"
+}
+macmini2 | SUCCESS => {
+    "changed": false,
+    "ping": "pong"
+}
+```
+
+The last and final option, writing a plugin is next.
+
+## Writing an Ansible module
+
+The idea is to take advantage of Ansible ecosystem for common tasks like execution and caching, as [explained in the documentation](https://docs.ansible.com/ansible/latest/dev_guide/developing_inventory.html#developing-an-inventory-plugin).
+
+I will take advantage of the parser and Nmap wrapper I wrote earlier, so the module file will have those classes embedded as well.
+
+We need to add 'Ansible' as a dependency to make our development easier (```requirements.txt```):
+
+```text
+setuptools>=60.5.0
+build>=0.7.0
+packaging==21.3
+wheel==0.37.1
+pip-audit==2.0.0
+ansible==5.4.0
+```
+
+And install it (it is a HEAVY package, so you should go a grab a coffee):
+```shell
+# Also you can:
+# pip install ansible==5.4.0
+pip install -r requirements.txt
 ```
 
 

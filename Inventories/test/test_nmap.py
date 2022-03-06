@@ -4,7 +4,8 @@ Unit tests for Nmap host capture
 from pathlib import Path
 from unittest import TestCase
 
-from Inventories.inventories.nmap import OutputParser, NmapRunner
+from inventories.config import load_config
+from inventories.nmap import OutputParser, NmapRunner
 
 BASEDIR = Path(__file__).parent
 
@@ -28,9 +29,21 @@ class TestNmapRunner(TestCase):
     """
     This test will fail if you are not running SSH at localhost.
     """
+
     def test_iter(self):
         addresses = list(NmapRunner("127.0.01/32"))
         self.assertIsNotNone(addresses)
         self.assertTrue(len(addresses) > 0)
         for address in addresses:
             print(address)
+
+
+class TestConfig(TestCase):
+
+    def test_load_config(self):
+        config = load_config(str(BASEDIR.joinpath('nmap_plugin.yaml')))
+        self.assertIsNotNone(config)
+        self.assertIn('plugin', config)
+        self.assertIsNotNone(config['plugin'])
+        self.assertIn('address', config)
+        self.assertIsNotNone(config['address'])

@@ -1,27 +1,16 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 """
 # nmap_inventory.py - Generates an Ansible dynamic inventory using NMAP
 # Author
 Jose Vicente Nunez Zuleta (kodegeek.com@protonmail.com)
 """
 import json
-import os.path
 import argparse
-from configparser import ConfigParser, MissingSectionHeaderError
 
 from inventories.nmap import NmapRunner
-
-
-def load_config() -> ConfigParser:
-    cp = ConfigParser()
-    try:
-        config_file = os.path.expanduser("~/.config/nmap_inventory.cfg")
-        cp.read(config_file)
-        if not cp.has_option('DEFAULT', 'Addresses'):
-            raise ValueError("Missing configuration option: DEFAULT -> Addresses")
-    except MissingSectionHeaderError as mhe:
-        raise ValueError("Invalid or missing configuration file:", mhe)
-    return cp
+from inventories.config import load_config
 
 
 def get_empty_vars():
@@ -92,7 +81,7 @@ if __name__ == '__main__':
 
     try:
         config = load_config()
-        addresses = config.get('DEFAULT', 'Addresses')
+        addresses = config['address']
 
         args = arg_parser.parse_args()
         if args.host:
