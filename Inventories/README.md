@@ -706,4 +706,71 @@ And install it (it is a HEAVY package, so you should go a grab a coffee):
 pip install -r requirements.txt
 ```
 
+### How the module looks like?
 
+To keep the dependencies simple for this tutorial, I included the 'OutputParser' and 'NmapRunner' on the module 'nmap_plugin' where the new
+plugin class 'NmapInventoryModule' will live:
+
+```python
+# Skipped classes and other imports, just showing new code
+from ansible.errors import AnsibleParserError
+from ansible.plugins.inventory import BaseInventoryPlugin, Cacheable, Constructable
+
+class NmapInventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
+    NAME = 'nmap_plugin'
+
+    def __init__(self):
+        super(BaseInventoryPlugin, self).__init__()
+
+    def verify_file(self, path: str):
+        if super(BaseInventoryPlugin, self).verify_file(path):
+            file_name, extension = os.path.splitext(path)
+            if extension and extension in ['yml', 'yaml'] and file_name == "nmap_plugin":
+                return True
+        return False
+
+    def parse(self, inventory, loader, path, cache=True):
+
+        super(BaseInventoryPlugin, self).parse(inventory, loader, path, cache=cache)
+        self._read_config_data(path)  # This also loads the cache
+        if not self.has_option('address'):
+            raise AnsibleParserError(f'Option "address" is required on the configuration file: {path}')
+        try:
+            hosts_data = list(NmapRunner(self.get_option('address')))
+            if not hosts_data:
+                raise AnsibleParserError(f"Unable to get data for Nmap scan!")
+            for host_data in hosts_data:
+                for name, address in host_data.items():
+                    self.inventory.add_host(name)
+                    self.inventory.set_variable(name, 'ip', address)
+        except CalledProcessError as cpe:
+            raise AnsibleParserError(f"There was an error while calling Nmap", cpe)
+```
+
+Things to notice on the NmapInventoryModule:
+* Requires method verify_file to be implemented. It decides if a configuration file is good enough to be used
+* Requires the parse method. This is where Nmap is called, XML output is parsed and inventory is populated
+* It uses multiple inheritance and because of that we get a few things for free, like configuration parsing, caching.
+* All the exceptions coming from this module must be wrapped around an AnsibleParserError
+
+Our configuration file is in place from the previous exercise, let's now deploy the module where ansible can find it:
+
+```shell
+
+```
+
+And define an inventory file that uses the new plugin:
+```yaml
+# Sample configuration file for custom nmap_plugin
+---
+plugin: nmap_plugin
+address: 192.168.1.0/24
+```
+
+Let's test the new module:
+
+```shell
+
+```
+
+TODO: FINISH!!!!
