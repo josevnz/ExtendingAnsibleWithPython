@@ -37,14 +37,14 @@ Having a static YAML inventory may not be entirely practical for the following r
 2. Your inventory is on a format that is not compatible with Ansible YAML; It may be on a database, a plain text file
 3. The servers that are part of your inventory is, well really dynamic; You create machines on your private cloud as you need them and their IP address change all the time, or you have a home network with lots of roaming devices (tables, phones). You want o maintain that by hand?
 
-## What are you going to learn on this article
+## What are you going to learn on this article?
 
 There are many ways to manage your inventories in Ansible, will cover a few alternatives here:
 
 * Converting inventories from legacy formats into Ansible
-* Dynamic inventories with plugins, specifically NMAP
+* Using dynamic inventories with plugins, specifically NMAP
 * Writing our own inventory script to generate inventories dynamically
-* Writing an Ansible plugin
+* Writing an Ansible inventory plugin
 
 All this while following good practices of packaging our tools, using virtual environments and unit testing our code.
 
@@ -136,7 +136,7 @@ No surprises here. But as you can see, this is not very convenient as we had to 
 
 Let's move on to a more interesting plug-ing, using nmap
 
-### nmap plugin
+### Nmap plugin
 
 The [Nmap](https://docs.ansible.com/ansible/2.9/plugins/inventory/nmap.html) plugin allows you to use the well known network scanner to build your inventory list.
 
@@ -177,7 +177,6 @@ And for our inventory, we really care about machines where Ansible can SSH and p
 
 ```shell
 # '-n': 'Never do DNS resolution',
-# '-sS': 'TCP SYN scan, recommended',
 # '-p-': 'All ports. Use -p22 to limit scan to port 22',
 # '-sV': 'Probe open ports to determine service/version info',
 # '-T4': 'Aggressive timing template',
@@ -218,8 +217,18 @@ Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
 ...
 Read data files from: /usr/bin/../share/nmap
 Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
-Nmap done: 256 IP addresses (10 hosts up) scanned in 2.73 seconds
+Nmap done: 256 IP addresses (8 hosts up) scanned in 2.71 seconds
 ```
+
+But If we don't care at all about port scanning, then we can replace the '-p22' with the '-sn' (Ping scan) flag:
+
+```shell
+[josevnz@dmaf5 ExtendingAnsibleWithPython]$ time nmap -v -n -sn --osscan-limit --max-os-tries 1 -oX $HOME/home_scan.xml 192.168.1.0/24
+Read data files from: /usr/bin/../share/nmap
+Nmap done: 256 IP addresses (8 hosts up) scanned in 2.52 seconds
+```
+
+This small difference may be a factor for bigger networks, so for now will keep the port scanning on 22.
 
 There are [many ways to extend Nmap](https://github.com/josevnz/home_nmap/blob/main/tutorial/README.md) to give you the data that you want; We will use '[nmap_scan_rpt.py](https://github.com/josevnz/home_nmap/blob/main/scripts/nmap_scan_rpt.py)' to show the results of the scan in a nice table, with links to NIST advisories if versions of your services are vulnerable:
 
@@ -242,12 +251,18 @@ Now we are ready to explore the [Ansible Nmap plugin](https://docs.ansible.com/a
 ```yaml
 # We do not want to do a port scan, only get the list of hosts dynamically
 ---
+# We do not want to do a port scan, only get the list of hosts dynamically
+---
 plugin: nmap
 address: 192.168.1.0/24
 strict: False
 ipv4: yes
 ports: no
+groups:
+  appliance: "'Amazon' in hostname"
+  regular: "'host' in hostname"
 ```
+
 
 ```shell
 [josevnz@dmaf5 EnableSysadmin]$ ansible-inventory -i ExtendingAnsibleWithPython/Inventories/home_nmap_inventory.yaml --lis
@@ -256,31 +271,182 @@ ports: no
 ```json
 {
     "_meta": {
-        "hostvars": {
-
-            "android-1c5660ab7065af69.home": {
-                "ip": "192.168.1.4",
-                "ports": []
-            },
-            "dmaf5.home": {
-                "ip": "192.168.1.26",
-                "ports": []
-            },
-    },
-    "all": {
+      "hostvars": {
+        "android-1c5660ab7065af69.home": {
+          "ip": "192.168.1.4",
+          "ports": []
+        },
+        "dmaf5.home": {
+          "ip": "192.168.1.26",
+          "ports": []
+        }
+      },
+      "all": {
         "children": [
-            "ungrouped"
+          "ungrouped"
         ]
-    },
-    "ungrouped": {
+      },
+      "ungrouped": {
         "hosts": [
-            "android-1c5660ab7065af69.home",
-            "dmaf5.home",
-            "macmini2",
-            "new-host-2.home",
-            "new-host-6.home",
-            "raspberrypi",
+          "android-1c5660ab7065af69.home",
+          "dmaf5.home",
+          "macmini2",
+          "new-host-2.home",
+          "new-host-6.home",
+          "raspberrypi"
         ]
+      }
     }
 }
 ```
+
+I [could not get to work the jinja2 'groups' feature](https://stackoverflow.com/questions/61826110/dynamic-inventory-groups-from-ansible-plugin-nmap), to put hosts into dynamic groups based on their hostname.
+
+There is another way to create an inventory using Nmap with Ansible? Let's find out.
+
+## Enter the world of dynamic inventory
+
+Ansible documentation explains [new ways to generate dynamic inventories](https://docs.ansible.com/ansible/latest/user_guide/intro_dynamic_inventory.html); I decided to try writing a simple Python script that is a front-end to the Nmap command.
+
+A few things before we dive in:
+* Ansible encourage using plugins as the way to create dynamic inventories; If you decide to write a plugin, language is Python and you should read the [regular plugin documentation](https://docs.ansible.com/ansible/latest/dev_guide/developing_plugins.html#developing-plugins) first.
+* If you decide to write a script, it is still supported AND you can use any language you want
+
+To illustrate both approaches, we will write first a script that fetches hosts using Nmap.
+
+The foundation of both approaches is a wrapper around the Nmap command:
+1. NmapRunner executes the Nmap with the desired flags and captures the XML output
+2. OutputParser parses the XML returns just the ip addresses we need
+3. NMapRunner implements an [iterator](https://wiki.python.org/moin/Iterator), so we can go and process each address any way we see it fit.
+
+Here is the code:
+
+```python
+import os
+import shlex
+import shutil
+import subprocess
+from typing import List
+from xml.etree import ElementTree
+
+
+class OutputParser:
+    def __init__(self, xml: str):
+        self.xml = xml
+
+    def get_addresses(self) -> List[str]:
+        """
+        Several things need to happen for an address to be included:
+        1. Host is up
+        2. Port is TCP 22
+        3. Port status is open
+        Otherwise the iterator will not be filled
+        :return:
+        """
+        addresses = []
+        root = ElementTree.fromstring(self.xml)
+        for host in root.findall('host'):
+            is_up = True
+            for status in host.findall('status'):
+                if status.attrib['state'] == 'down':
+                    is_up = False
+                    break
+            if not is_up:
+                continue
+            port_22_open = False
+            for ports in host.findall('ports'):
+                for port in ports.findall('port'):
+                    if port.attrib['portid'] == '22':
+                        for state in port.findall('state'):
+                            if state.attrib['state'] == "open":
+                                port_22_open = True
+                                break
+            if not port_22_open:
+                continue
+
+            for address in host.findall('address'):
+                addresses.append(address.attrib['addr'])
+        return addresses
+
+
+class NmapRunner:
+
+    def __init__(self, hosts: str):
+        self.nmap_report_file = None
+        found_nmap = shutil.which('nmap', mode=os.F_OK | os.X_OK)
+        if not found_nmap:
+            raise ValueError(f"Nmap is missing!")
+        self.nmap = found_nmap
+        self.hosts = hosts
+
+    def __iter__(self):
+        command = [self.nmap]
+        command.extend(__NMAP__FLAGS__)
+        command.append(self.hosts)
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            shell=False,
+            check=True
+        )
+        completed.check_returncode()
+        out_par = OutputParser(completed.stdout.decode('utf-8'))
+        self.addresses = out_par.get_addresses()
+        return self
+
+    def __next__(self):
+        try:
+            return self.addresses.pop()
+        except IndexError:
+            raise StopIteration
+
+
+# Convert the args for proper usage on the Nmap CLI
+NMAP_DEFAULT_FLAGS = {
+    '-n': 'Never do DNS resolution',
+    '-p22': 'Port 22 scanning',
+    '-T4': 'Aggressive timing template',
+    '-PE': 'Enable this echo request behavior. Good for internal networks',
+    '--disable-arp-ping': 'No ARP or ND Ping',
+    '--max-hostgroup 50': 'Hostgroup (batch of hosts scanned concurrently) size',
+    '--min-parallelism 50': 'Number of probes that may be outstanding for a host group',
+    '--osscan-limit': 'Limit OS detection to promising targets',
+    '--max-os-tries 1': 'Maximum number of OS detection tries against a target',
+    '-oX -': 'Send XML output to STDOUT, avoid creating a temp file'
+}
+__NMAP__FLAGS__ = shlex.split(" ".join(NMAP_DEFAULT_FLAGS.keys()))
+```
+
+For example, you could use the NmapRunner like this:
+
+```python
+def test_iter():
+    for address in NmapRunner("192.168.1.0/24"):
+        print(address)
+```
+
+## Writing an inventory script
+
+Ansible documentation [is very clear](https://docs.ansible.com/ansible/latest/dev_guide/developing_inventory.html#inventory-script-conventions) about the only 2 requirements we need for our script.
+1. Must support --list and --host <hostname> excluding flag
+2. Must return proper JSON for both of them
+3. Other flags can be added but will not be used by Ansible
+
+Wait a second. There is nothing in there that says than Ansible will provide the network to scan for hosts, how do we inject that?
+
+To keep things simple, our script will be able to read a configuration file on "~/config/nmap_inventory.ini" with the following:
+
+```ini
+[DEFAULT]
+Addresses = 192.168.1.0/24
+```
+
+Very good, let's see some code now:
+
+```python
+
+```
+
+
+
+
