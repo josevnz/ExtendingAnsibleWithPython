@@ -1,30 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE nmaprun>
 <?xml-stylesheet href="file:///usr/bin/../share/nmap/nmap.xsl" type="text/xsl"?>
-<!-- Nmap 7.80 scan initiated Sun Mar  6 05:54:04 2022 as: nmap -v -n -p22 -&#45;osscan-limit -&#45;max-os-tries 1 -oX /home/josevnz/home_scan.xml 192.168.1.0/24 -->
-<nmaprun scanner="nmap" args="nmap -v -n -p22 -&#45;osscan-limit -&#45;max-os-tries 1 -oX /home/josevnz/home_scan.xml 192.168.1.0/24" start="1646564044" startstr="Sun Mar  6 05:54:04 2022" version="7.80" xmloutputversion="1.04">
+<!-- Nmap 7.80 scan initiated Sun Mar  6 08:31:06 2022 as: nmap -v -p22 -&#45;osscan-limit -&#45;max-os-tries 1 -oX /home/josevnz/home_scan.xml 192.168.1.0/24 -->
+<nmaprun scanner="nmap" args="nmap -v -p22 -&#45;osscan-limit -&#45;max-os-tries 1 -oX /home/josevnz/home_scan.xml 192.168.1.0/24" start="1646573466" startstr="Sun Mar  6 08:31:06 2022" version="7.80" xmloutputversion="1.04">
 <scaninfo type="connect" protocol="tcp" numservices="1" services="22"/>
 <verbose level="1"/>
 <debugging level="0"/>
-<taskbegin task="Ping Scan" time="1646564044"/>
-<taskend task="Ping Scan" time="1646564046" extrainfo="256 total hosts"/>
+<taskbegin task="Ping Scan" time="1646573466"/>
+<taskend task="Ping Scan" time="1646573469" extrainfo="256 total hosts"/>
+<taskbegin task="Parallel DNS resolution of 256 hosts." time="1646573469"/>
+<taskend task="Parallel DNS resolution of 256 hosts." time="1646573469"/>
 <host><status state="down" reason="no-response" reason_ttl="0"/>
 <address addr="192.168.1.0" addrtype="ipv4"/>
-</host>
-<host><status state="down" reason="no-response" reason_ttl="0"/>
-<address addr="192.168.1.2" addrtype="ipv4"/>
 </host>
 <host><status state="down" reason="no-response" reason_ttl="0"/>
 <address addr="192.168.1.3" addrtype="ipv4"/>
 </host>
 <host><status state="down" reason="no-response" reason_ttl="0"/>
-<address addr="192.168.1.4" addrtype="ipv4"/>
-</host>
-<host><status state="down" reason="no-response" reason_ttl="0"/>
 <address addr="192.168.1.5" addrtype="ipv4"/>
-</host>
-<host><status state="down" reason="no-response" reason_ttl="0"/>
-<address addr="192.168.1.7" addrtype="ipv4"/>
 </host>
 <host><status state="down" reason="no-response" reason_ttl="0"/>
 <address addr="192.168.1.8" addrtype="ipv4"/>
@@ -49,9 +42,6 @@
 </host>
 <host><status state="down" reason="no-response" reason_ttl="0"/>
 <address addr="192.168.1.19" addrtype="ipv4"/>
-</host>
-<host><status state="down" reason="no-response" reason_ttl="0"/>
-<address addr="192.168.1.20" addrtype="ipv4"/>
 </host>
 <host><status state="down" reason="no-response" reason_ttl="0"/>
 <address addr="192.168.1.21" addrtype="ipv4"/>
@@ -752,72 +742,116 @@
 <host><status state="down" reason="net-unreach" reason_ttl="0"/>
 <address addr="192.168.1.255" addrtype="ipv4"/>
 </host>
-<taskbegin task="Connect Scan" time="1646564046"/>
-<taskend task="Connect Scan" time="1646564046" extrainfo="8 total ports"/>
-<host starttime="1646564044" endtime="1646564046"><status state="up" reason="syn-ack" reason_ttl="0"/>
+<taskbegin task="Connect Scan" time="1646573469"/>
+<taskend task="Connect Scan" time="1646573469" extrainfo="12 total ports"/>
+<host starttime="1646573466" endtime="1646573469"><status state="up" reason="syn-ack" reason_ttl="0"/>
 <address addr="192.168.1.1" addrtype="ipv4"/>
 <hostnames>
+<hostname name="myrouter.optimum.net.home" type="PTR"/>
 </hostnames>
 <ports><port protocol="tcp" portid="22"><state state="closed" reason="conn-refused" reason_ttl="0"/><service name="ssh" method="table" conf="3"/></port>
 </ports>
-<times srtt="1156" rttvar="3950" to="100000"/>
+<times srtt="1402" rttvar="3967" to="100000"/>
 </host>
-<host starttime="1646564044" endtime="1646564046"><status state="up" reason="conn-refused" reason_ttl="0"/>
+<host starttime="1646573466" endtime="1646573469"><status state="up" reason="conn-refused" reason_ttl="0"/>
+<address addr="192.168.1.2" addrtype="ipv4"/>
+<hostnames>
+<hostname name="new-host.home" type="PTR"/>
+</hostnames>
+<ports><port protocol="tcp" portid="22"><state state="closed" reason="conn-refused" reason_ttl="0"/><service name="ssh" method="table" conf="3"/></port>
+</ports>
+<times srtt="13148" rttvar="24103" to="109560"/>
+</host>
+<host starttime="1646573466" endtime="1646573469"><status state="up" reason="syn-ack" reason_ttl="0"/>
+<address addr="192.168.1.4" addrtype="ipv4"/>
+<hostnames>
+<hostname name="android-1c5660ab7065af69.home" type="PTR"/>
+</hostnames>
+<ports><port protocol="tcp" portid="22"><state state="closed" reason="conn-refused" reason_ttl="0"/><service name="ssh" method="table" conf="3"/></port>
+</ports>
+<times srtt="2028" rttvar="3921" to="100000"/>
+</host>
+<host starttime="1646573466" endtime="1646573469"><status state="up" reason="conn-refused" reason_ttl="0"/>
 <address addr="192.168.1.6" addrtype="ipv4"/>
 <hostnames>
+<hostname name="AmazonPlug0URW.home" type="PTR"/>
 </hostnames>
 <ports><port protocol="tcp" portid="22"><state state="closed" reason="conn-refused" reason_ttl="0"/><service name="ssh" method="table" conf="3"/></port>
 </ports>
-<times srtt="7837" rttvar="6810" to="100000"/>
+<times srtt="7994" rttvar="6272" to="100000"/>
 </host>
-<host starttime="1646564044" endtime="1646564046"><status state="up" reason="conn-refused" reason_ttl="0"/>
+<host starttime="1646573466" endtime="1646573469"><status state="up" reason="conn-refused" reason_ttl="0"/>
+<address addr="192.168.1.7" addrtype="ipv4"/>
+<hostnames>
+<hostname name="new-host-6.home" type="PTR"/>
+</hostnames>
+<ports><port protocol="tcp" portid="22"><state state="closed" reason="conn-refused" reason_ttl="0"/><service name="ssh" method="table" conf="3"/></port>
+</ports>
+<times srtt="91350" rttvar="81390" to="416910"/>
+</host>
+<host starttime="1646573466" endtime="1646573469"><status state="up" reason="conn-refused" reason_ttl="0"/>
 <address addr="192.168.1.9" addrtype="ipv4"/>
 <hostnames>
+<hostname name="tepuyes-living-room.home" type="PTR"/>
 </hostnames>
 <ports><port protocol="tcp" portid="22"><state state="closed" reason="conn-refused" reason_ttl="0"/><service name="ssh" method="table" conf="3"/></port>
 </ports>
-<times srtt="471" rttvar="3781" to="100000"/>
+<times srtt="477" rttvar="3798" to="100000"/>
 </host>
-<host starttime="1646564044" endtime="1646564046"><status state="up" reason="conn-refused" reason_ttl="0"/>
+<host starttime="1646573466" endtime="1646573469"><status state="up" reason="conn-refused" reason_ttl="0"/>
 <address addr="192.168.1.11" addrtype="ipv4"/>
 <hostnames>
+<hostname name="raspberrypi" type="PTR"/>
 </hostnames>
 <ports><port protocol="tcp" portid="22"><state state="open" reason="syn-ack" reason_ttl="0"/><service name="ssh" method="table" conf="3"/></port>
 </ports>
-<times srtt="563" rttvar="3815" to="100000"/>
+<times srtt="341" rttvar="3770" to="100000"/>
 </host>
-<host starttime="1646564044" endtime="1646564046"><status state="up" reason="syn-ack" reason_ttl="0"/>
+<host starttime="1646573466" endtime="1646573469"><status state="up" reason="syn-ack" reason_ttl="0"/>
 <address addr="192.168.1.14" addrtype="ipv4"/>
 <hostnames>
+<hostname name="HPDD2750.home" type="PTR"/>
 </hostnames>
 <ports><port protocol="tcp" portid="22"><state state="closed" reason="conn-refused" reason_ttl="0"/><service name="ssh" method="table" conf="3"/></port>
 </ports>
-<times srtt="6283" rttvar="6092" to="100000"/>
+<times srtt="6699" rttvar="5659" to="100000"/>
 </host>
-<host starttime="1646564044" endtime="1646564046"><status state="up" reason="conn-refused" reason_ttl="0"/>
+<host starttime="1646573466" endtime="1646573469"><status state="up" reason="conn-refused" reason_ttl="0"/>
 <address addr="192.168.1.16" addrtype="ipv4"/>
 <hostnames>
+<hostname name="macmini2" type="PTR"/>
 </hostnames>
 <ports><port protocol="tcp" portid="22"><state state="open" reason="syn-ack" reason_ttl="0"/><service name="ssh" method="table" conf="3"/></port>
 </ports>
-<times srtt="809" rttvar="2869" to="100000"/>
+<times srtt="1036" rttvar="3756" to="100000"/>
 </host>
-<host starttime="1646564044" endtime="1646564046"><status state="up" reason="conn-refused" reason_ttl="0"/>
+<host starttime="1646573466" endtime="1646573469"><status state="up" reason="conn-refused" reason_ttl="0"/>
+<address addr="192.168.1.20" addrtype="ipv4"/>
+<hostnames>
+<hostname name="new-host-2.home" type="PTR"/>
+</hostnames>
+<ports><port protocol="tcp" portid="22"><state state="closed" reason="conn-refused" reason_ttl="0"/><service name="ssh" method="table" conf="3"/></port>
+</ports>
+<times srtt="89132" rttvar="83326" to="422436"/>
+</host>
+<host starttime="1646573466" endtime="1646573469"><status state="up" reason="conn-refused" reason_ttl="0"/>
 <address addr="192.168.1.25" addrtype="ipv4"/>
 <hostnames>
+<hostname name="dmaf5.home" type="PTR"/>
 </hostnames>
 <ports><port protocol="tcp" portid="22"><state state="open" reason="syn-ack" reason_ttl="0"/><service name="ssh" method="table" conf="3"/></port>
 </ports>
-<times srtt="76" rttvar="3797" to="100000"/>
+<times srtt="58" rttvar="3782" to="100000"/>
 </host>
-<host starttime="1646564044" endtime="1646564046"><status state="up" reason="conn-refused" reason_ttl="0"/>
+<host starttime="1646573466" endtime="1646573469"><status state="up" reason="conn-refused" reason_ttl="0"/>
 <address addr="192.168.1.26" addrtype="ipv4"/>
 <hostnames>
+<hostname name="dmaf5.home" type="PTR"/>
 </hostnames>
 <ports><port protocol="tcp" portid="22"><state state="open" reason="syn-ack" reason_ttl="0"/><service name="ssh" method="table" conf="3"/></port>
 </ports>
-<times srtt="38" rttvar="3782" to="100000"/>
+<times srtt="35" rttvar="3785" to="100000"/>
 </host>
-<runstats><finished time="1646564046" timestr="Sun Mar  6 05:54:06 2022" elapsed="2.58" summary="Nmap done at Sun Mar  6 05:54:06 2022; 256 IP addresses (8 hosts up) scanned in 2.58 seconds" exit="success"/><hosts up="8" down="248" total="256"/>
+<runstats><finished time="1646573469" timestr="Sun Mar  6 08:31:09 2022" elapsed="3.35" summary="Nmap done at Sun Mar  6 08:31:09 2022; 256 IP addresses (12 hosts up) scanned in 3.35 seconds" exit="success"/><hosts up="12" down="244" total="256"/>
 </runstats>
 </nmaprun>

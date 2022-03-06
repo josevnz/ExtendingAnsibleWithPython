@@ -2,7 +2,7 @@ import os
 import shlex
 import shutil
 import subprocess
-from typing import List
+from typing import List, Dict
 from xml.etree import ElementTree
 
 
@@ -10,18 +10,38 @@ class OutputParser:
     def __init__(self, xml: str):
         self.xml = xml
 
-    def get_addresses(self) -> List[str]:
+    def get_addresses(self) -> List[Dict[str, str]]:
         """
         Several things need to happen for an address to be included:
         1. Host is up
         2. Port is TCP 22
         3. Port status is open
         Otherwise the iterator will not be filled
-        :return:
+        :return: List of dictionaries
+        It is possible to have multiple PTR records assigned to different IP addresses
+        [josevnz@dmaf5 EnableSysadmin]$ nslookup dmaf5.home
+        Server:		127.0.0.53
+        Address:	127.0.0.53#53
+        Non-authoritative answer:
+        Name:	dmaf5.home
+        Address: 192.168.1.26
+        Name:	dmaf5.home
+        Address: 192.168.1.25
+        Name:	dmaf5.home
+        Address: fd22:4e39:e630:1:1937:89d4:5cbc:7a8d
+        Name:	dmaf5.home
+        Address: fd22:4e39:e630:1:e711:3539:b731:10dd
         """
         addresses = []
         root = ElementTree.fromstring(self.xml)
         for host in root.findall('host'):
+            name = None
+            for hostnames in host.findall('hostnames'):
+                for hostname in hostnames:
+                    name = hostname.attrib['name']
+                    break
+            if not name:
+                continue
             is_up = True
             for status in host.findall('status'):
                 if status.attrib['state'] == 'down':
@@ -34,14 +54,16 @@ class OutputParser:
                 for port in ports.findall('port'):
                     if port.attrib['portid'] == '22':
                         for state in port.findall('state'):
-                            if state.attrib['state'] == "open":
+                            if state.attrib['state'] == "open":  # Up not the same as open, we want SSH access!
                                 port_22_open = True
                                 break
             if not port_22_open:
                 continue
-
-            for address in host.findall('address'):
-                addresses.append(address.attrib['addr'])
+            address = None
+            for address_data in host.findall('address'):
+                address = address_data.attrib['addr']
+                break
+            addresses.append({name: address})
         return addresses
 
 
@@ -77,9 +99,11 @@ class NmapRunner:
             raise StopIteration
 
 
-# Convert the args for proper usage on the Nmap CLI
+"""
+Convert the args for proper usage on the Nmap CLI
+Also, do not use the -n flag. We need to resolve IP addresses to hostname, even if we sacrifice a little bit of speed
+"""
 NMAP_DEFAULT_FLAGS = {
-    '-n': 'Never do DNS resolution',
     '-p22': 'Port 22 scanning',
     '-T4': 'Aggressive timing template',
     '-PE': 'Enable this echo request behavior. Good for internal networks',

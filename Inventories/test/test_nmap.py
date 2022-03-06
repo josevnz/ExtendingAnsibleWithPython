@@ -15,12 +15,13 @@ class TestOutputParser(TestCase):
         with open(BASEDIR.joinpath("home_scan.xml"), 'rt') as home_scan_file:
             out_p = OutputParser(home_scan_file.read())
             self.assertIsNotNone(out_p)
-            addresses = out_p.get_addresses()
-            self.assertIsNotNone(addresses)
-            for address in addresses:
-                self.assertIsNotNone(address)
-                self.assertIn(address, ['192.168.1.11', '192.168.1.16', '192.168.1.25', '192.168.1.26'])
-                print(address)
+            hosts_data = out_p.get_addresses()
+            self.assertIsNotNone(hosts_data)
+            for host_data in hosts_data:
+                for name, address in host_data.items():
+                    self.assertIsNotNone(name)
+                    self.assertIn(address, ['192.168.1.11', '192.168.1.16', '192.168.1.25', '192.168.1.26'])
+                    print(address)
 
 
 class TestNmapRunner(TestCase):

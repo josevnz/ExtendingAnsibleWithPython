@@ -326,7 +326,7 @@ import os
 import shlex
 import shutil
 import subprocess
-from typing import List
+from typing import List, Dict
 from xml.etree import ElementTree
 
 
@@ -334,7 +334,7 @@ class OutputParser:
     def __init__(self, xml: str):
         self.xml = xml
 
-    def get_addresses(self) -> List[str]:
+    def get_addresses(self) -> List[Dict[str, str]]:
         """
         Several things need to happen for an address to be included:
         1. Host is up
@@ -346,6 +346,13 @@ class OutputParser:
         addresses = []
         root = ElementTree.fromstring(self.xml)
         for host in root.findall('host'):
+            name = None
+            for hostnames in host.findall('hostnames'):
+                for hostname in hostnames:
+                    name = hostname.attrib['name']
+                    break
+            if not name:
+                continue
             is_up = True
             for status in host.findall('status'):
                 if status.attrib['state'] == 'down':
@@ -358,14 +365,16 @@ class OutputParser:
                 for port in ports.findall('port'):
                     if port.attrib['portid'] == '22':
                         for state in port.findall('state'):
-                            if state.attrib['state'] == "open":
+                            if state.attrib['state'] == "open":  # Up not the same as open, we want SSH access!
                                 port_22_open = True
                                 break
             if not port_22_open:
                 continue
-
-            for address in host.findall('address'):
-                addresses.append(address.attrib['addr'])
+            address = None
+            for address_data in host.findall('address'):
+                address = address_data.attrib['addr']
+                break
+            addresses.append({name: address})
         return addresses
 
 
@@ -401,9 +410,11 @@ class NmapRunner:
             raise StopIteration
 
 
-# Convert the args for proper usage on the Nmap CLI
+"""
+Convert the args for proper usage on the Nmap CLI
+Also, do not use the -n flag. We need to resolve IP addresses to hostname, even if we sacrifice a little bit of speed
+"""
 NMAP_DEFAULT_FLAGS = {
-    '-n': 'Never do DNS resolution',
     '-p22': 'Port 22 scanning',
     '-T4': 'Aggressive timing template',
     '-PE': 'Enable this echo request behavior. Good for internal networks',
@@ -420,9 +431,10 @@ __NMAP__FLAGS__ = shlex.split(" ".join(NMAP_DEFAULT_FLAGS.keys()))
 For example, you could use the NmapRunner like this:
 
 ```python
+import pprint
 def test_iter():
-    for address in NmapRunner("192.168.1.0/24"):
-        print(address)
+    for hosts_data in NmapRunner("192.168.1.0/24"):
+        pprint.print(hosts_data)
 ```
 
 ## Writing an inventory script
@@ -444,9 +456,179 @@ Addresses = 192.168.1.0/24
 Very good, let's see some code now:
 
 ```python
+#!/usr/bin/env python
+"""
+# nmap_inventory.py - Generates an Ansible dynamic inventory using NMAP
+# Author
+Jose Vicente Nunez Zuleta (kodegeek.com@protonmail.com)
+"""
+import json
+import os.path
+import argparse
+from configparser import ConfigParser, MissingSectionHeaderError
 
+from inventories.nmap import NmapRunner
+
+
+def load_config() -> ConfigParser:
+    cp = ConfigParser()
+    try:
+        config_file = os.path.expanduser("~/.config/nmap_inventory.cfg")
+        cp.read(config_file)
+        if not cp.has_option('DEFAULT', 'Addresses'):
+            raise ValueError("Missing configuration option: DEFAULT -> Addresses")
+    except MissingSectionHeaderError as mhe:
+        raise ValueError("Invalid or missing configuration file:", mhe)
+    return cp
+
+
+def get_empty_vars():
+    return json.dumps({})
+
+
+def get_list(search_address: str, pretty=False) -> str:
+    """
+    All group is always returned
+    Ungrouped at least contains all the names found
+    IP addresses are added as vars in the __meta tag, for efficiency as mentioned in the Ansible documentation.
+    Note than we can add logic here to put machines in custom groups, will keep it simple for now.
+    :param search_address: Results of the scan with NMap
+    :param pretty: Indentation
+    :return: JSON string
+    """
+    found_data = list(NmapRunner(search_address))
+    hostvars = {}
+    ungrouped = []
+    for host_data in found_data:
+        for name, address in host_data.items():
+            if name not in ungrouped:
+                ungrouped.append(name)
+            if name not in hostvars:
+                hostvars[name] = {'ip': []}
+            hostvars[name]['ip'].append(address)
+    data = {
+        '_meta': {
+          'hostvars': hostvars
+        },
+        'all': {
+            'children': [
+                'ungrouped'
+            ]
+        },
+        'ungrouped': {
+            'hosts': ungrouped
+        }
+    }
+    return json.dumps(data, indent=pretty)
+
+
+if __name__ == '__main__':
+
+    arg_parser = argparse.ArgumentParser(
+        description=__doc__,
+        prog=__file__
+    )
+    arg_parser.add_argument(
+        '--pretty',
+        action='store_true',
+        default=False,
+        help="Pretty print JSON"
+    )
+    mandatory_options = arg_parser.add_mutually_exclusive_group()
+    mandatory_options.add_argument(
+        '--list',
+        action='store',
+        nargs="*",
+        default="dummy",
+        help="Show JSON of all managed hosts"
+    )
+    mandatory_options.add_argument(
+        '--host',
+        action='store',
+        help="Display vars related to the host"
+    )
+
+    try:
+        config = load_config()
+        addresses = config.get('DEFAULT', 'Addresses')
+
+        args = arg_parser.parse_args()
+        if args.host:
+            print(get_empty_vars())
+        elif len(args.list) >= 0:
+            print(get_list(addresses, args.pretty))
+        else:
+            raise ValueError("Expecting either --host $HOSTNAME or --list")
+
+    except ValueError:
+        raise
 ```
 
+You probably noticed a few things:
+1. Most of the code on this script is dedicated to handling arguments and loading configuration, besides presenting the JSON
+2. You could add grouping logic into get_list. For now, I'm populating the 2 default groups.
 
+
+
+Time to kick the tires now. Install the code first:
+
+```shell
+git clone git@github.com:josevnz/ExtendingAnsibleWithPython.git
+cd ExtendingAnsibleWithPython/Inventory
+python3 -m venv ~/virtualenv/ExtendingAnsibleWithPythonInventory
+. ~/virtualenv/ExtendingAnsibleWithPythonInventory/bin/activate
+pip install wheel
+pip install --upgrade pip
+pip install build
+python setup.py bdist_wheel
+pip install dist/*
+```
+
+The virtual environment should be active now, let's see if we get an empty host information (put the name of a machine in your network):
+
+```shell
+(ExtendingAnsibleWithPythonInventory) [josevnz@dmaf5 Inventories]$ ansible-inventory --inventory scripts/nmap_inventory.py --host raspberrypi
+{}
+```
+
+Good, expected as we did not implement the ```--host $HOSTNAME method```. What about ```--list```?:
+
+```shell
+(ExtendingAnsibleWithPythonInventory) [josevnz@dmaf5 Inventories]$ ansible-inventory --inventory scripts/nmap_inventory.py --list
+{
+    "_meta": {
+        "hostvars": {
+            "dmaf5.home": {
+                "ip": [
+                    "192.168.1.26",
+                    "192.168.1.25"
+                ]
+            },
+            "macmini2": {
+                "ip": [
+                    "192.168.1.16"
+                ]
+            },
+            "raspberrypi": {
+                "ip": [
+                    "192.168.1.11"
+                ]
+            }
+        }
+    },
+    "all": {
+        "children": [
+            "ungrouped"
+        ]
+    },
+    "ungrouped": {
+        "hosts": [
+            "dmaf5.home",
+            "macmini2",
+            "raspberrypi"
+        ]
+    }
+}
+```
 
 
