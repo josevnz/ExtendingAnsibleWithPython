@@ -6,8 +6,8 @@ support Jinja2 expressions.
 Where you can install this module?
 
 ```shell
-(ExtendingAnsibleWithPythonInventory) [josevnz@dmaf5 Inventories]$ ansible-config dump |grep DEFAULT_MODULE_PATH
-DEFAULT_MODULE_PATH(default) = ['/home/josevnz/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']
+[josevnz@dmaf5 ExtendingAnsibleWithPython]$ ansible-config dump|grep DEFAULT_INVENTORY_PLUGIN_PATH
+DEFAULT_INVENTORY_PLUGIN_PATH(default) = ['/home/josevnz/.ansible/plugins/inventory', '/usr/share/ansible/plugins/inventory']
 ```
 
 """
@@ -33,9 +33,41 @@ DOCUMENTATION = r'''
           required: true
           choices: ['nmap_plugin']
       address:
-        description: Directory location of the CSV inventory
+        description: Address to scan, in Nmap supported format
         required: true
 '''
+
+
+class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
+
+    NAME = 'nmap_plugin'
+
+    def __init__(self):
+        super(InventoryModule, self).__init__()
+
+    def verify_file(self, path: str):
+        if super(InventoryModule, self).verify_file(path):
+            return path.endswith('nmap_plugin_inventory.yaml') or path.endswith('nmap_plugin.yaml')
+        return False
+
+    def parse(self, inventory, loader, path: str, cache: bool=True):
+
+        super(InventoryModule, self).parse(inventory, loader, path, cache=cache)
+        self._read_config_data(path)  # This also loads the cache
+        # root_group_name = self.inventory.add_group('root-group')
+
+        if not self.has_option('address'):
+            raise AnsibleParserError(f'Option "address" is required on the configuration file: {path}')
+        try:
+            hosts_data = list(NmapRunner(self.get_option('address')))
+            if not hosts_data:
+                raise AnsibleParserError(f"Unable to get data for Nmap scan!")
+            for host_data in hosts_data:
+                for name, address in host_data.items():
+                    self.inventory.add_host(name)
+                    self.inventory.set_variable(name, 'ip', address)
+        except CalledProcessError as cpe:
+            raise AnsibleParserError(f"There was an error while calling Nmap", cpe)
 
 
 class OutputParser:
@@ -147,34 +179,3 @@ NMAP_DEFAULT_FLAGS = {
     '-oX -': 'Send XML output to STDOUT, avoid creating a temp file'
 }
 __NMAP__FLAGS__ = shlex.split(" ".join(NMAP_DEFAULT_FLAGS.keys()))
-
-
-class NmapInventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
-    NAME = 'nmap_plugin'
-
-    def __init__(self):
-        super(BaseInventoryPlugin, self).__init__()
-
-    def verify_file(self, path: str):
-        if super(BaseInventoryPlugin, self).verify_file(path):
-            file_name, extension = os.path.splitext(path)
-            if extension and extension in ['yml', 'yaml'] and file_name == "nmap_plugin":
-                return True
-        return False
-
-    def parse(self, inventory, loader, path, cache=True):
-
-        super(BaseInventoryPlugin, self).parse(inventory, loader, path, cache=cache)
-        self._read_config_data(path)  # This also loads the cache
-        if not self.has_option('address'):
-            raise AnsibleParserError(f'Option "address" is required on the configuration file: {path}')
-        try:
-            hosts_data = list(NmapRunner(self.get_option('address')))
-            if not hosts_data:
-                raise AnsibleParserError(f"Unable to get data for Nmap scan!")
-            for host_data in hosts_data:
-                for name, address in host_data.items():
-                    self.inventory.add_host(name)
-                    self.inventory.set_variable(name, 'ip', address)
-        except CalledProcessError as cpe:
-            raise AnsibleParserError(f"There was an error while calling Nmap", cpe)

@@ -41,7 +41,7 @@ class TestNmapRunner(TestCase):
 class TestConfig(TestCase):
 
     def test_load_config(self):
-        config = load_config(str(BASEDIR.joinpath('nmap_plugin.yaml')))
+        config = load_config(str(BASEDIR.joinpath('nmap_plugin_inventory.yaml')))
         self.assertIsNotNone(config)
         self.assertIn('plugin', config)
         self.assertIsNotNone(config['plugin'])

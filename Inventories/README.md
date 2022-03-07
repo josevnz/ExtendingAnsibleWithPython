@@ -716,23 +716,38 @@ plugin class 'NmapInventoryModule' will live:
 from ansible.errors import AnsibleParserError
 from ansible.plugins.inventory import BaseInventoryPlugin, Cacheable, Constructable
 
+DOCUMENTATION = r'''
+    name: nmap_plugin
+    plugin_type: inventory
+    short_description: Returns Ansible inventory from Nmap scan
+    description: Returns Ansible inventory from Nmap scan
+    options:
+      plugin:
+          description: Name of the plugin
+          required: true
+          choices: ['nmap_plugin']
+      address:
+        description: Address to scan, in Nmap supported format
+        required: true
+'''
+
+
 class NmapInventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
     NAME = 'nmap_plugin'
 
     def __init__(self):
-        super(BaseInventoryPlugin, self).__init__()
+        super(NmapInventoryModule, self).__init__()
 
     def verify_file(self, path: str):
-        if super(BaseInventoryPlugin, self).verify_file(path):
-            file_name, extension = os.path.splitext(path)
-            if extension and extension in ['yml', 'yaml'] and file_name == "nmap_plugin":
-                return True
+        if super(NmapInventoryModule, self).verify_file(path):
+            return path.endswith('nmap_plugin_inventory.yaml')
         return False
 
     def parse(self, inventory, loader, path, cache=True):
 
-        super(BaseInventoryPlugin, self).parse(inventory, loader, path, cache=cache)
+        super(NmapInventoryModule, self).parse(inventory, loader, path, cache=cache)
         self._read_config_data(path)  # This also loads the cache
+
         if not self.has_option('address'):
             raise AnsibleParserError(f'Option "address" is required on the configuration file: {path}')
         try:
@@ -752,14 +767,18 @@ Things to notice on the NmapInventoryModule:
 * Requires the parse method. This is where Nmap is called, XML output is parsed and inventory is populated
 * It uses multiple inheritance and because of that we get a few things for free, like configuration parsing, caching.
 * All the exceptions coming from this module must be wrapped around an AnsibleParserError
+* Documentation must be correct, otherwise 'get_option()' will not work
 
 Our configuration file is in place from the previous exercise, let's now deploy the module where ansible can find it:
 
 ```shell
-
+[josevnz@dmaf5 ExtendingAnsibleWithPython]$ ansible-config dump|grep DEFAULT_INVENTORY_PLUGIN_PATH
+DEFAULT_INVENTORY_PLUGIN_PATH(default) = ['/home/josevnz/.ansible/plugins/inventory', '/usr/share/ansible/plugins/inventory']
+/bin/mkdir --parents --verbose /home/josevnz/.ansible/plugins/inventory/
+/bin/cp -p -v Inventories/inventories/nmap_plugin.py /home/josevnz/.ansible/plugins/inventory/
 ```
 
-And define an inventory file that uses the new plugin:
+And define an inventory file that uses the new plugin ([nmap_plugin_inventory.yaml](test/nmap_plugin_inventory.yaml)):
 ```yaml
 # Sample configuration file for custom nmap_plugin
 ---
@@ -770,7 +789,32 @@ address: 192.168.1.0/24
 Let's test the new module:
 
 ```shell
+# Does Ansible recognize it?
+[josevnz@dmaf5 ExtendingAnsibleWithPython]$ ansible-doc -t inventory -l|grep nmap_plugin
+nmap_plugin         Returns Ansible inventory from Nmap scan                            
+
+# Smoke test, check if we get any host listed
+(ExtendingAnsibleWithPythonInventory) [josevnz@dmaf5 Inventories]$ ansible-inventory --inventory $PWD/test/nmap_plugin_inventory.yaml  --list -v -v -v
 
 ```
 
 TODO: FINISH!!!!
+
+## Quick recap
+
+_We cover a lot of material_, here is a quick summary:
+* Use the host_list plugin and saw some of its obvious limitations
+* Did a quick check on Nmap and how it can be used to scan all the hosts in your network
+* Moved into using the Ansible Nmap and compare its functionality with your manual Nmap scan
+* Then wrote a script that calls Nmap CLI and is compatible with Ansible inventory contract, so it can be used to get a dynamic view of the hosts on your network
+* Finally, wrote an inventory plugin, taking advantage of the Ansible environment to build a plugin without too much boilerplate code
+
+There is more to learn, I do recommend you also check the following content besides the [official documentation](https://docs.ansible.com/ansible/latest/user_guide/intro_inventory.html):
+* [Managing Meaningful inventories - Ansible fest 2019](https://www.ansible.com/managing-meaningful-inventories)
+* [Ansible Inventory for Fun And Profit](https://www.ansible.com/ansible-inventory-for-fun-and-profit)
+* [Ansible Custom Inventory Plugin - a hands-on, quick start guide](https://termlen0.github.io/2019/11/16/observations/): This is another very well done tutorial on how to write inventory plugins, but also how to troubleshoot them.
+* Ansible's collections through [Ansible Galaxy](https://docs.ansible.com/ansible/latest/user_guide/collections_using.html): There is a more robust way to package and share your Ansible modules, just like using pip to install Python modules.
+
+Remember, you [can download the code](https://github.com/josevnz/ExtendingAnsibleWithPython) and experiment!. The best way to learn is by doing and making mistakes.
+
+
