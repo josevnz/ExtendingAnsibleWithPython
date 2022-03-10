@@ -803,11 +803,11 @@ TODO: FINISH!!!!
 ## Quick recap
 
 _We cover a lot of material_, here is a quick summary:
-* Use the host_list plugin and saw some of its obvious limitations
-* Did a quick check on Nmap and how it can be used to scan all the hosts in your network
-* Moved into using the Ansible Nmap and compare its functionality with your manual Nmap scan
-* Then wrote a script that calls Nmap CLI and is compatible with Ansible inventory contract, so it can be used to get a dynamic view of the hosts on your network
-* Finally, wrote an inventory plugin, taking advantage of the Ansible environment to build a plugin without too much boilerplate code
+* Introduced the host_list plugin and saw some of its obvious limitations
+* Did a quick check on Nmap and how it can be used to scan all the hosts in your network; with that knowledge we moved on into creating an inventory using this tool.
+* Configured and ran the Ansible Nmap and compared its functionality with your manual Nmap scan.
+* Wrote a script that calls Nmap CLI and is compatible with Ansible inventory contract, so it can be used to get create a dynamic inventory. This is probably the most flexible in terms of coding as the requirements are pretty loose, and can be done any language.
+* Finally, created an inventory plugin, taking advantage of the Ansible environment to build our network scanner without too much boilerplate code. It is also a more rigid approach compared with the dynamic inventory script.
 
 There is more to learn, I do recommend you also check the following content besides the [official documentation](https://docs.ansible.com/ansible/latest/user_guide/intro_inventory.html):
 * [Managing Meaningful inventories - Ansible fest 2019](https://www.ansible.com/managing-meaningful-inventories)

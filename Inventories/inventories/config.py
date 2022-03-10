@@ -1,6 +1,6 @@
 """
 Using a configuration file in YAML format, so it can be reused by the plugin.
-Init file with ConfigParser is more convenient, trying to keep Ansible happy :wink:
+An 'Ini' file with ConfigParser is more convenient but will keep the configuration files
 """
 import os
 from yaml import safe_load
@@ -11,12 +11,14 @@ except ImportError:
     from yaml import Loader, Dumper
 
 
-def load_config(config_file: str = os.path.expanduser("~/.ansible/plugins/cliconf/nmap_inventory.cfg")):
+def load_config(config_file: str = os.path.expanduser("~/.ansible/plugins/cliconf/nmap_inventory.yaml")):
     """
     Where to copy the configuration file:
     ```shell
     [josevnz@dmaf5 EnableSysadmin]$ ansible-config dump |grep DEFAULT_CLICONF_PLUGIN_PATH
-    DEFAULT_CLICONF_PLUGIN_PATH(default) = ['/home/josevnz/.ansible/plugins/cliconf', '/usr/share/ansible/plugins/cliconf']
+    DEFAULT_CLICONF_PLUGIN_PATH(default) = [
+    '/home/josevnz/.ansible/plugins/cliconf', '/usr/share/ansible/plugins/cliconf'
+    ]
     ```
     :param config_file:
     :return:
