@@ -7,7 +7,9 @@ Where you can install this module?
 
 ```shell
 [josevnz@dmaf5 ExtendingAnsibleWithPython]$ ansible-config dump|grep DEFAULT_INVENTORY_PLUGIN_PATH
-DEFAULT_INVENTORY_PLUGIN_PATH(default) = ['/home/josevnz/.ansible/plugins/inventory', '/usr/share/ansible/plugins/inventory']
+DEFAULT_INVENTORY_PLUGIN_PATH(default) = [
+'/home/josevnz/.ansible/plugins/inventory', '/usr/share/ansible/plugins/inventory'
+]
 ```
 
 """
@@ -50,7 +52,7 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
             return path.endswith('nmap_plugin_inventory.yaml') or path.endswith('nmap_plugin.yaml')
         return False
 
-    def parse(self, inventory, loader, path: str, cache: bool=True):
+    def parse(self, inventory, loader, path: str, cache: bool = True):
 
         super(InventoryModule, self).parse(inventory, loader, path, cache=cache)
         self._read_config_data(path)  # This also loads the cache
