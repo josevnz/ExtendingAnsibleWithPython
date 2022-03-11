@@ -1,4 +1,5 @@
-# Sample configuration file for custom nmap_plugin
+# This is the configuration file for my version of the Nmap plugin, nmap_plugin
+# Showing required parameters below
 ---
 plugin: nmap_plugin
 address: 192.168.1.0/24

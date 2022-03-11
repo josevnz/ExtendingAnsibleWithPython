@@ -1,3 +1,4 @@
+# This is the configuration file for the Open Source official Nmap plugin
 # We do not want to do a port scan, only get the list of hosts dynamically
 ---
 plugin: nmap

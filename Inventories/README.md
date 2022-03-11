@@ -712,15 +712,28 @@ To keep the dependencies simple for this tutorial, I included the 'OutputParser'
 plugin class 'NmapInventoryModule' will live:
 
 ```python
-# Skipped classes and other imports, just showing new code
+"""
+A simple inventory plugin that uses Nmap to get the list of hosts
+Jose Vicente Nunez (kodegeek.com@protonmail.com)
+"""
+
+import os.path
+from subprocess import CalledProcessError
+import os
+import shlex
+import shutil
+import subprocess
+from typing import List, Dict, Any
+from xml.etree import ElementTree
+# The imports below are the ones required for an Ansible plugin
 from ansible.errors import AnsibleParserError
 from ansible.plugins.inventory import BaseInventoryPlugin, Cacheable, Constructable
 
 DOCUMENTATION = r'''
     name: nmap_plugin
     plugin_type: inventory
-    short_description: Returns Ansible inventory from Nmap scan
-    description: Returns Ansible inventory from Nmap scan
+    short_description: Returns a dynamic host inventory from Nmap scan
+    description: Returns a dynamic host inventory from Nmap scan, filter machines that can be accessed with SSH
     options:
       plugin:
           description: Name of the plugin
@@ -732,42 +745,141 @@ DOCUMENTATION = r'''
 '''
 
 
-class NmapInventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
+class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
+
     NAME = 'nmap_plugin'
 
     def __init__(self):
-        super(NmapInventoryModule, self).__init__()
+        super(InventoryModule, self).__init__()
+        self.address = None
+        self.plugin = None
 
     def verify_file(self, path: str):
-        if super(NmapInventoryModule, self).verify_file(path):
-            return path.endswith('nmap_plugin_inventory.yaml')
+        if super(InventoryModule, self).verify_file(path):
+            return path.endswith('yaml') or path.endswith('yml')
         return False
 
-    def parse(self, inventory, loader, path, cache=True):
-
-        super(NmapInventoryModule, self).parse(inventory, loader, path, cache=cache)
+    def parse(self, inventory: Any, loader: Any, path: Any, cache: bool = True) -> Any:
+        super(InventoryModule, self).parse(inventory, loader, path, cache)
         self._read_config_data(path)  # This also loads the cache
-
-        if not self.has_option('address'):
-            raise AnsibleParserError(f'Option "address" is required on the configuration file: {path}')
         try:
-            hosts_data = list(NmapRunner(self.get_option('address')))
+            self.plugin = self.get_option('plugin')
+            self.address = self.get_option('address')
+            hosts_data = list(NmapRunner(self.address))
             if not hosts_data:
-                raise AnsibleParserError(f"Unable to get data for Nmap scan!")
+                raise AnsibleParserError("Unable to get data for Nmap scan!")
             for host_data in hosts_data:
                 for name, address in host_data.items():
                     self.inventory.add_host(name)
                     self.inventory.set_variable(name, 'ip', address)
+        except KeyError as kerr:
+            raise AnsibleParserError(f'Missing required option on the configuration file: {path}', kerr)
         except CalledProcessError as cpe:
-            raise AnsibleParserError(f"There was an error while calling Nmap", cpe)
+            raise AnsibleParserError("There was an error while calling Nmap", cpe)
+
+
+class OutputParser:
+    def __init__(self, xml: str):
+        self.xml = xml
+
+    def get_addresses(self) -> List[Dict[str, str]]:
+        """
+        Several things need to happen for an address to be included:
+        1. Host is up
+        2. Port is TCP 22
+        3. Port status is open
+        4. Uses IPv4
+        """
+        addresses = []
+        root = ElementTree.fromstring(self.xml)
+        for host in root.findall('host'):
+            name = None
+            for hostnames in host.findall('hostnames'):
+                for hostname in hostnames:
+                    name = hostname.attrib['name']
+                    break
+            if not name:
+                continue
+            is_up = True
+            for status in host.findall('status'):
+                if status.attrib['state'] == 'down':
+                    is_up = False
+                    break
+            if not is_up:
+                continue
+            port_22_open = False
+            for ports in host.findall('ports'):
+                for port in ports.findall('port'):
+                    if port.attrib['portid'] == '22':
+                        for state in port.findall('state'):
+                            if state.attrib['state'] == "open":  # Up not the same as open, we want SSH access!
+                                port_22_open = True
+                                break
+            if not port_22_open:
+                continue
+            address = None
+            for address_data in host.findall('address'):
+                address = address_data.attrib['addr']
+                break
+            addresses.append({name: address})
+        return addresses
+
+
+class NmapRunner:
+
+    def __init__(self, hosts: str):
+        self.nmap_report_file = None
+        found_nmap = shutil.which('nmap', mode=os.F_OK | os.X_OK)
+        if not found_nmap:
+            raise ValueError("Nmap binary is missing!")
+        self.nmap = found_nmap
+        self.hosts = hosts
+
+    def __iter__(self):
+        command = [self.nmap]
+        command.extend(__NMAP__FLAGS__)
+        command.append(self.hosts)
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            shell=False,
+            check=True
+        )
+        completed.check_returncode()
+        out_par = OutputParser(completed.stdout.decode('utf-8'))
+        self.addresses = out_par.get_addresses()
+        return self
+
+    def __next__(self):
+        try:
+            return self.addresses.pop()
+        except IndexError:
+            raise StopIteration
+
+
+"""
+Convert the args for proper usage on the Nmap CLI
+Also, do not use the -n flag. We need to resolve IP addresses to hostname, even if we sacrifice a little bit of speed
+"""
+NMAP_DEFAULT_FLAGS = {
+    '-p22': 'Port 22 scanning',
+    '-T4': 'Aggressive timing template',
+    '-PE': 'Enable this echo request behavior. Good for internal networks',
+    '--disable-arp-ping': 'No ARP or ND Ping',
+    '--max-hostgroup 50': 'Hostgroup (batch of hosts scanned concurrently) size',
+    '--min-parallelism 50': 'Number of probes that may be outstanding for a host group',
+    '--osscan-limit': 'Limit OS detection to promising targets',
+    '--max-os-tries 1': 'Maximum number of OS detection tries against a target',
+    '-oX -': 'Send XML output to STDOUT, avoid creating a temp file'
+}
+__NMAP__FLAGS__ = shlex.split(" ".join(NMAP_DEFAULT_FLAGS.keys()))
 ```
 
 Things to notice on the NmapInventoryModule:
-* Requires method verify_file to be implemented. It decides if a configuration file is good enough to be used
+* The method verify_file doesn't need be implemented, but it is a good idea. It decides if a configuration file is good enough to be used
 * Requires the parse method. This is where Nmap is called, XML output is parsed and inventory is populated
 * It uses multiple inheritance and because of that we get a few things for free, like configuration parsing, caching.
 * All the exceptions coming from this module must be wrapped around an AnsibleParserError
-* Documentation must be correct, otherwise 'get_option()' will not work
 
 Our configuration file is in place from the previous exercise, let's now deploy the module where ansible can find it:
 
@@ -791,25 +903,54 @@ Let's test the new module:
 ```shell
 # Does Ansible recognize it?
 [josevnz@dmaf5 ExtendingAnsibleWithPython]$ ansible-doc -t inventory -l|grep nmap_plugin
-nmap_plugin         Returns Ansible inventory from Nmap scan                            
-
-# Smoke test, check if we get any host listed
-(ExtendingAnsibleWithPythonInventory) [josevnz@dmaf5 Inventories]$ ansible-inventory --inventory $PWD/test/nmap_plugin_inventory.yaml  --list -v -v -v
-
+nmap_plugin         Returns a dynamic host inventory from Nmap scan
 ```
 
-TODO: FINISH!!!!
+```shell
+# Smoke test, check if we get any host listed
+(ExtendingAnsibleWithPythonInventory) [josevnz@dmaf5 Inventories]$ ansible-inventory --inventory $PWD/test/nmap_plugin_inventory.yaml  --list -v -v -v
+[josevnz@dmaf5 ExtendingAnsibleWithPython]$ ansible-inventory --inventory Inventories/test/nmap_plugin_inventory.yaml --list
+{
+    "_meta": {
+        "hostvars": {
+            "dmaf5.home": {
+                "ip": "192.168.1.25"
+            },
+            "macmini2": {
+                "ip": "192.168.1.16"
+            },
+            "raspberrypi": {
+                "ip": "192.168.1.11"
+            }
+        }
+    },
+    "all": {
+        "children": [
+            "ungrouped"
+        ]
+    },
+    "ungrouped": {
+        "hosts": [
+            "dmaf5.home",
+            "macmini2",
+            "raspberrypi"
+        ]
+    }
+}
+```
 
-## Quick recap
+## What is next?
 
-_We cover a lot of material_, here is a quick summary:
-* Introduced the host_list plugin and saw some of its obvious limitations
+_We cover a lot of material_, here is a quick summary of what we learned:
+
+* Introduced the host_list plugin and saw some of its obvious limitations, specifically when you want to use a large number of hosts
 * Did a quick check on Nmap and how it can be used to scan all the hosts in your network; with that knowledge we moved on into creating an inventory using this tool.
-* Configured and ran the Ansible Nmap and compared its functionality with your manual Nmap scan.
+* Configured and ran the community Ansible Nmap and compared its functionality with our manual Nmap scan.
 * Wrote a script that calls Nmap CLI and is compatible with Ansible inventory contract, so it can be used to get create a dynamic inventory. This is probably the most flexible in terms of coding as the requirements are pretty loose, and can be done any language.
-* Finally, created an inventory plugin, taking advantage of the Ansible environment to build our network scanner without too much boilerplate code. It is also a more rigid approach compared with the dynamic inventory script.
+* Finally, created an inventory plugin, taking advantage of the Ansible environment to build our network scanner without too much boilerplate code. It is also a more rigid compared with the dynamic inventory script, but you get several services for free like caching and configuration file parsing.
 
-There is more to learn, I do recommend you also check the following content besides the [official documentation](https://docs.ansible.com/ansible/latest/user_guide/intro_inventory.html):
+There is more to learn!, I do recommend you also check the following content besides the [official documentation](https://docs.ansible.com/ansible/latest/user_guide/intro_inventory.html):
+
 * [Managing Meaningful inventories - Ansible fest 2019](https://www.ansible.com/managing-meaningful-inventories)
 * [Ansible Inventory for Fun And Profit](https://www.ansible.com/ansible-inventory-for-fun-and-profit)
 * [Ansible Custom Inventory Plugin - a hands-on, quick start guide](https://termlen0.github.io/2019/11/16/observations/): This is another very well done tutorial on how to write inventory plugins, but also how to troubleshoot them.

@@ -1,34 +1,25 @@
 """
-Module around the NmapWorker class.
-No need to use 'from ansible.module_utils.common.text.converters import to_text' as this plugin doesn't
-support Jinja2 expressions.
-
-Where you can install this module?
-
-```shell
-[josevnz@dmaf5 ExtendingAnsibleWithPython]$ ansible-config dump|grep DEFAULT_INVENTORY_PLUGIN_PATH
-DEFAULT_INVENTORY_PLUGIN_PATH(default) = [
-'/home/josevnz/.ansible/plugins/inventory', '/usr/share/ansible/plugins/inventory'
-]
-```
-
+A simple inventory plugin that uses Nmap to get the list of hosts
+Jose Vicente Nunez (kodegeek.com@protonmail.com)
 """
+
 import os.path
 from subprocess import CalledProcessError
 import os
 import shlex
 import shutil
 import subprocess
-from typing import List, Dict
+from typing import List, Dict, Any
 from xml.etree import ElementTree
+# The imports below are the ones required for an Ansible plugin
 from ansible.errors import AnsibleParserError
 from ansible.plugins.inventory import BaseInventoryPlugin, Cacheable, Constructable
 
 DOCUMENTATION = r'''
     name: nmap_plugin
     plugin_type: inventory
-    short_description: Returns Ansible inventory from Nmap scan
-    description: Returns Ansible inventory from Nmap scan
+    short_description: Returns a dynamic host inventory from Nmap scan
+    description: Returns a dynamic host inventory from Nmap scan, filter machines that can be accessed with SSH
     options:
       plugin:
           description: Name of the plugin
@@ -46,30 +37,31 @@ class InventoryModule(BaseInventoryPlugin, Constructable, Cacheable):
 
     def __init__(self):
         super(InventoryModule, self).__init__()
+        self.address = None
+        self.plugin = None
 
     def verify_file(self, path: str):
         if super(InventoryModule, self).verify_file(path):
-            return path.endswith('nmap_plugin_inventory.yaml') or path.endswith('nmap_plugin.yaml')
+            return path.endswith('yaml') or path.endswith('yml')
         return False
 
-    def parse(self, inventory, loader, path: str, cache: bool = True):
-
-        super(InventoryModule, self).parse(inventory, loader, path, cache=cache)
+    def parse(self, inventory: Any, loader: Any, path: Any, cache: bool = True) -> Any:
+        super(InventoryModule, self).parse(inventory, loader, path, cache)
         self._read_config_data(path)  # This also loads the cache
-        # root_group_name = self.inventory.add_group('root-group')
-
-        if not self.has_option('address'):
-            raise AnsibleParserError(f'Option "address" is required on the configuration file: {path}')
         try:
-            hosts_data = list(NmapRunner(self.get_option('address')))
+            self.plugin = self.get_option('plugin')
+            self.address = self.get_option('address')
+            hosts_data = list(NmapRunner(self.address))
             if not hosts_data:
-                raise AnsibleParserError(f"Unable to get data for Nmap scan!")
+                raise AnsibleParserError("Unable to get data for Nmap scan!")
             for host_data in hosts_data:
                 for name, address in host_data.items():
                     self.inventory.add_host(name)
                     self.inventory.set_variable(name, 'ip', address)
+        except KeyError as kerr:
+            raise AnsibleParserError(f'Missing required option on the configuration file: {path}', kerr)
         except CalledProcessError as cpe:
-            raise AnsibleParserError(f"There was an error while calling Nmap", cpe)
+            raise AnsibleParserError("There was an error while calling Nmap", cpe)
 
 
 class OutputParser:
@@ -82,21 +74,7 @@ class OutputParser:
         1. Host is up
         2. Port is TCP 22
         3. Port status is open
-        Otherwise the iterator will not be filled
-        :return: List of dictionaries
-        It is possible to have multiple PTR records assigned to different IP addresses
-        [josevnz@dmaf5 EnableSysadmin]$ nslookup dmaf5.home
-        Server:		127.0.0.53
-        Address:	127.0.0.53#53
-        Non-authoritative answer:
-        Name:	dmaf5.home
-        Address: 192.168.1.26
-        Name:	dmaf5.home
-        Address: 192.168.1.25
-        Name:	dmaf5.home
-        Address: fd22:4e39:e630:1:1937:89d4:5cbc:7a8d
-        Name:	dmaf5.home
-        Address: fd22:4e39:e630:1:e711:3539:b731:10dd
+        4. Uses IPv4
         """
         addresses = []
         root = ElementTree.fromstring(self.xml)
@@ -139,7 +117,7 @@ class NmapRunner:
         self.nmap_report_file = None
         found_nmap = shutil.which('nmap', mode=os.F_OK | os.X_OK)
         if not found_nmap:
-            raise ValueError(f"Nmap is missing!")
+            raise ValueError("Nmap binary is missing!")
         self.nmap = found_nmap
         self.hosts = hosts
 
