@@ -1,4 +1,4 @@
-# Scripts and dynamic inventories with Ansible
+# Scripts and Dynamic Inventories With Ansible
 
 On the [previous article](BeyondStaticInventoriesInAnsible.md) of this series, you saw why it is not very convenient to use a static inventory to handle your Ansible playbooks:
 
