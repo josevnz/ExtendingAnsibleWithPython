@@ -1,4 +1,7 @@
 # ExtendingAnsibleWithPython
+
+![](mazinger-z.png)
+
 Tutorial how to extend Ansible with Python
 
 This repository is composed of several modules. They are small enough right now, so I plan to keep this in a single place 
